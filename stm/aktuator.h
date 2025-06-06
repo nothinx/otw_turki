@@ -1,3 +1,4 @@
+#include <cstdlib>
 // Fungsi untuk mengontrol aktuator dengan PWM
 void setActuator(uint8_t pin, uint8_t value) {
     analogWrite(pin, value);  // Mengontrol aktuator dengan PWM
@@ -9,13 +10,15 @@ void setActuator(uint8_t pin, uint8_t value) {
 void adjustPWM(uint8_t pin, int &pwmValue, char input) {
     if (input == '+') {
         pwmValue += 20;
-        if (pwmValue > 240) pwmValue = 240;  // Membatasi PWM maksimal 240
+        if (pwmValue > 255) pwmValue = 255;  // Membatasi PWM maksimal 240
     } else if (input == '-') {
         pwmValue -= 20;
         if (pwmValue < 0) pwmValue = 0;  // Membatasi PWM minimal 0
     }
     analogWrite(pin, pwmValue);
-    Serial.print("PWM: ");
+    Serial.print("PWM ");
+    Serial.print(pin);
+    Serial.print(" : ");
     Serial.println(pwmValue);
 }
 
@@ -24,10 +27,15 @@ void setup_aktuator(){
     pinMode(FAN_PERL, OUTPUT);
     pinMode(FAN_RAD, OUTPUT);
     pinMode(GROWLIGHT, OUTPUT);
+    pinMode(RPWM_PELT, OUTPUT);
     pinMode(UV, OUTPUT);
     pinMode(HUMIDIFIER, OUTPUT);
     pinMode(WATERPUMP, OUTPUT);
     pinMode(led, OUTPUT);
+    digitalWrite(UV, HIGH);
+    digitalWrite(HUMIDIFIER, HIGH);
+    digitalWrite(WATERPUMP,  HIGH);
+    digitalWrite(led, HIGH);
 
 }
 
@@ -50,6 +58,12 @@ void kontrol_aktuator(){
         adjustPWM(FAN_RAD, pwmRFan, '+');
     }
 
+    if (input == 'd') {
+        adjustPWM(RPWM_PELT, pwmPelt, '-');
+    } else if (input == 'D') {
+        adjustPWM(RPWM_PELT, pwmPelt, '+');
+    }
+
     // Adjust PWM for Growlight
     if (input == 'g') {
         adjustPWM(GROWLIGHT, pwmGLed, '-');
@@ -60,8 +74,10 @@ void kontrol_aktuator(){
     // Kontrol Water Pump
     if (input == 'W') {
         digitalWrite(WATERPUMP, LOW);  // Nyalakan Water Pump
+        delay(500);
+        digitalWrite(WATERPUMP, HIGH);
     } else if (input == 'w') {
-        digitalWrite(WATERPUMP, HIGH);  // Matikan Water Pump
+        digitalWrite(WATERPUMP, HIGH);  // Matikan Water Pump   
     }
 
     // Kontrol UV LED
