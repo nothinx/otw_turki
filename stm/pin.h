@@ -10,7 +10,7 @@
 #define UV           PB4     // UV Light
 #define HUMIDIFIER   PA9     // Humidifier
 #define WATERPUMP    PA10     // Water Pump
-#define led          PC13    // LED indicator
+#define led          PB5    // LED indicator
 
 // Alamat sensor dan objek
 CCS811 mySensor(CCS811_ADDR);   // Objek sensor CCS811
@@ -18,10 +18,10 @@ Adafruit_BME280 bme;            // Objek sensor BME280
 BH1750 lightMeter;              // Objek sensor BH1750
 
 
-int pwmPFan = 250;  // Initial PWM value for Peltier fan
-int pwmRFan = 250;  // Initial PWM value for Radiator fan
+int pwmPFan = 255;  // Initial PWM value for Peltier fan
+int pwmRFan = 255;  // Initial PWM value for Radiator fan
 int pwmGLed = 0;  // Initial PWM value for Growlight
-int pwmPelt = 250;
+int pwmPelt = 255;
 
 // Fungsi untuk memilih channel pada TCA9548A
 void TCA9548A(uint8_t bus) {
