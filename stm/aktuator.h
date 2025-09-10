@@ -1,105 +1,114 @@
-#include <cstdlib>
-// Fungsi untuk mengontrol aktuator dengan PWM
-void setActuator(uint8_t pin, uint8_t value) {
-    analogWrite(pin, value);  // Mengontrol aktuator dengan PWM
-}
+#ifndef AKTUATOR_H
+#define AKTUATOR_H
 
+// Forward declaration untuk fungsi yang ada di file .ino utama
+// Ini memberitahu compiler bahwa fungsi ini ada di tempat lain.
+void sendSensorDataToJetson();
 
+// Definisikan pin untuk lampu indikator
+#define LIGHT        PB4     // PIN BARU UNTUK LAMPU INDIKATOR
 
-// Fungsi untuk menyesuaikan PWM dan memastikan nilainya tidak lebih dari 240
-void adjustPWM(uint8_t pin, int &pwmValue, char input) {
-    if (input == '+') {
-        pwmValue += 20;
-        if (pwmValue > 255) pwmValue = 255;  // Membatasi PWM maksimal 240
-    } else if (input == '-') {
-        pwmValue -= 20;
-        if (pwmValue < 0) pwmValue = 0;  // Membatasi PWM minimal 0
-    }
-    analogWrite(pin, pwmValue);
-    Serial.print("PWM ");
-    Serial.print(pin);
-    Serial.print(" : ");
-    Serial.println(pwmValue);
-}
-
-void setup_aktuator(){
-     // Setup pin modes untuk aktuator
-    pinMode(FAN_PERL, OUTPUT);
-    pinMode(FAN_RAD, OUTPUT);
-    pinMode(GROWLIGHT, OUTPUT);
-    pinMode(RPWM_PELT, OUTPUT);
-    pinMode(UV, OUTPUT);
+// =================================================================
+//                 FUNGSI SETUP AKTUATOR
+// =================================================================
+void setup_aktuator() {
+    // Setup pin modes untuk semua aktuator
+    pinMode(LIGHT, OUTPUT);   // Setup pin untuk lampu indikator
+    pinMode(UV_LIGHT, OUTPUT);
+    pinMode(GROWLIGHT1, OUTPUT); // Pin untuk PWM Grow Light 1 (Merah)
+    pinMode(GROWLIGHT2, OUTPUT); // Pin untuk PWM Grow Light 2 (Biru)
     pinMode(HUMIDIFIER, OUTPUT);
-    pinMode(WATERPUMP, OUTPUT);
-    pinMode(led, OUTPUT);
-    digitalWrite(UV, HIGH);
-    digitalWrite(HUMIDIFIER, HIGH);
-    digitalWrite(WATERPUMP,  HIGH);
-    digitalWrite(led, HIGH);
+    pinMode(WATER_PUMP, OUTPUT);
+    pinMode(RPWM_PELTIER, OUTPUT);
+    pinMode(LPWM_PELTIER, OUTPUT);
+    pinMode(FAN_PELTIER, OUTPUT);
+    pinMode(FAN_RADIATOR, OUTPUT);
 
+    // Set kondisi awal (default) untuk semua aktuator saat startup
+    digitalWrite(LIGHT, LOW);      // Lampu indikator menyala saat HIGH
+    digitalWrite(UV_LIGHT, LOW);    // Relay ON saat LOW (aktif LOW, jadi OFF saat HIGH)
+    digitalWrite(HUMIDIFIER, LOW);  // Relay ON saat LOW (aktif LOW, jadi OFF saat HIGH)
+    digitalWrite(WATER_PUMP, LOW);  // Relay ON saat LOW (aktif LOW, jadi OFF saat HIGH)
+   // digitalWrite(LPWM_PELTIER, LOW);  // Relay ON saat LOW (aktif LOW, jadi OFF saat HIGH)
+    // Set nilai awal untuk semua aktuator PWM ke 0 (mati)
+    analogWrite(GROWLIGHT1, 0);
+    analogWrite(GROWLIGHT2, 0);
+    
+    // Set nilai awal untuk aktuator PWM lainnya sesuai kebutuhan
+    analogWrite(RPWM_PELTIER, 185);
+    digitalWrite(LPWM_PELTIER, 0);
+    analogWrite(FAN_PELTIER, 255);
+    analogWrite(FAN_RADIATOR, 255);
 }
 
-void kontrol_aktuator(){
- // Pengaturan PWM berdasarkan input dari Jetson Orin Nano (contoh: menggunakan serial input)
-  if (Serial.available() > 0) {
-    char input = Serial.read();
+// =================================================================
+//                 FUNGSI KONTROL AKTUATOR
+// =================================================================
+// Mendengarkan perintah dari Serial (Jetson) dan menggerakkan aktuator.
+void kontrol_aktuator() {
+    if (Serial.available() > 0) {
+        char commandChar = Serial.read(); // Baca karakter perintah utama
 
-    // Adjust PWM for Peltier fan
-    if (input == 'p')  {
-        adjustPWM(FAN_PERL, pwmPFan, '-');
-    } else if (input == 'P') {
-        adjustPWM(FAN_PERL, pwmPFan, '+');
+        switch (commandChar) {
+            case 'S': // Perintah untuk meminta data sensor
+                sendSensorDataToJetson();
+                break;
+
+            // --- KONTROL ON/OFF (HIGH = ON, LOW = OFF) ---
+            case 'U': // Kontrol UV Light (U1/U0)
+                if (Serial.read() == '1') { digitalWrite(UV_LIGHT, HIGH); Serial.println("UV Light ON"); }
+                else { digitalWrite(UV_LIGHT, LOW); Serial.println("UV Light OFF"); }
+                break;
+
+            case 'H': // Kontrol Humidifier (H1/H0)
+                if (Serial.read() == '1') { digitalWrite(HUMIDIFIER, HIGH); Serial.println("Humidifier ON"); }
+                else { digitalWrite(HUMIDIFIER, LOW); Serial.println("Humidifier OFF"); }
+                break;
+
+            case 'W': // Kontrol Water Pump (W1/W0)
+                if (Serial.read() == '1') { digitalWrite(WATER_PUMP, HIGH); Serial.println("Water Pump ON"); }
+                else { digitalWrite(WATER_PUMP, LOW); Serial.println("Water Pump OFF"); }
+                break;
+
+            // --- KONTROL LAMPU INDIKATOR (L1 = ON, L0 = OFF) ---
+            case 'L': // Kontrol Lampu Indikator (L1/L0)
+                if (Serial.read() == '1') { 
+                    digitalWrite(LIGHT, HIGH); 
+                    Serial.println("Lampu Indikator ON");
+                }
+                else { 
+                    digitalWrite(LIGHT, LOW); 
+                    Serial.println("Lampu Indikator OFF");
+                }
+                break;
+
+            // --- KONTROL PWM ---
+            case 'P': // Set Kipas Peltier speed
+            case 'R': // Set Kipas Radiator speed
+            case 'D': // Set Peltier PWM
+            case 'G': // Set Grow Light 1 (Merah) PWM
+            case 'B': // Set Grow Light 2 (Biru) PWM
+                {
+                    // Metode andal untuk membaca nilai integer dari serial
+                    int value = Serial.parseInt(); 
+                    
+                    // Batasi nilai yang diterima antara 0 dan 255
+                    value = constrain(value, 0, 255); 
+
+                    if (commandChar == 'P') { analogWrite(FAN_PELTIER, value); Serial.print("Kipas Peltier speed: "); Serial.println(value); }
+                    else if (commandChar == 'R') { analogWrite(FAN_RADIATOR, value); Serial.print("Kipas Radiator speed: "); Serial.println(value); }
+                    else if (commandChar == 'D') { analogWrite(RPWM_PELTIER, value); Serial.print("Peltier PWM: "); Serial.println(value); }
+                    else if (commandChar == 'G') { analogWrite(GROWLIGHT1, value); Serial.print("Grow Light 1 (Merah) PWM: "); Serial.println(value); }
+                    else if (commandChar == 'B') { analogWrite(GROWLIGHT2, value); Serial.print("Grow Light 2 (Biru) PWM: "); Serial.println(value); }
+                }
+                break;
+        }
+
+        // Buang sisa data di buffer untuk mencegah perintah error pada loop berikutnya
+        while(Serial.available() > 0) {
+            Serial.read();
+        }
     }
-
-    // Adjust PWM for Radiator fan
-    if (input == 'r') {
-        adjustPWM(FAN_RAD, pwmRFan, '-');
-    } else if (input == 'R') {
-        adjustPWM(FAN_RAD, pwmRFan, '+');
-    }
-
-    if (input == 'd') {
-        adjustPWM(RPWM_PELT, pwmPelt, '-');
-    } else if (input == 'D') {
-        adjustPWM(RPWM_PELT, pwmPelt, '+');
-    }
-
-    // Adjust PWM for Growlight
-    if (input == 'g') {
-        adjustPWM(GROWLIGHT, pwmGLed, '-');
-    } else if (input == 'G') {
-        adjustPWM(GROWLIGHT, pwmGLed, '+');
-    }
-
-    // Kontrol Water Pump
-    if (input == 'W') {
-        digitalWrite(WATERPUMP, LOW);  // Nyalakan Water Pump
-        delay(500);
-        digitalWrite(WATERPUMP, HIGH);
-    } else if (input == 'w') {
-        digitalWrite(WATERPUMP, HIGH);  // Matikan Water Pump   
-    }
-
-    // Kontrol UV LED
-    if (input == 'U') {
-        digitalWrite(UV, LOW);  // Nyalakan UV LED
-    } else if (input == 'u') {
-        digitalWrite(UV, HIGH);  // Matikan UV LED
-    }
-
-    // Kontrol LED Grow Light
-    if (input == 'L') {
-        digitalWrite(led, LOW);  // Nyalakan LED Grow Light
-    } else if (input == 'l') {
-        digitalWrite(led, HIGH);  // Matikan LED Grow Light
-    }
-
-    // Kontrol Humidifier
-    if (input == 'H') {
-        digitalWrite(HUMIDIFIER, LOW);  // Nyalakan Humidifier
-    } else if (input == 'h') {
-        digitalWrite(HUMIDIFIER, HIGH);  // Matikan Humidifier
-    }
-  } 
-
 }
+
+#endif // AKTUATOR_H

@@ -1,80 +1,87 @@
-// Fungsi untuk menampilkan nilai sensor pada OLED
-float suhu1, suhu2,suhuAvg, hum1, hum2, humAvg, lux1, lux2, luxAvg;
+#ifndef SENSOR_H
+#define SENSOR_H
 
+// --- FAKTOR PENGHALUSAN DATA (0.0 - 1.0) ---
+// Semakin kecil nilainya, semakin halus datanya, namun respon lebih lambat.
+const float FILTER_ALPHA = 0.15;
 
+// Variabel global untuk menyimpan nilai sensor yang sudah difilter
+float suhu1, suhu2, suhuAvg, hum1, hum2, humAvg, lux1, lux2, luxAvg, co2_val, tvoc_val;
+
+// =================================================================
+//                 FUNGSI SETUP SENSOR
+// =================================================================
+// Menginisialisasi semua sensor pada channel I2C yang benar.
 void setup_sensor(){
-      // Inisialisasi sensor
-    TCA9548A(6);  // CCS811
+    Serial.println("--- Memulai Setup Sensor ---");
+
+    // Inisialisasi sensor CCS811 (di channel 0)
+    TCA9548A(0);
+    Serial.print("Inisialisasi CCS811 di channel 0... ");
     if (!mySensor.begin()) {
-        Serial.println("CCS811 gagal mulai.");
-        while (1);
+        Serial.println("GAGAL! Periksa koneksi.");
+        while (1); // Berhenti jika sensor utama gagal
+    } else {
+        Serial.println("BERHASIL!");
     }
 
-    TCA9548A(1);  // BME280 & BH1750
-    if (!bme.begin(0x76)) {
-        Serial.println("BME280 gagal mulai.");
-    }
-    if (!lightMeter.begin(BH1750::CONTINUOUS_HIGH_RES_MODE)) {
-        Serial.println("BH1750 gagal mulai.");
-    }
-
-    TCA9548A(3);  // BME280 & BH1750
-    if (!bme.begin(0x76)) {
-        Serial.println("BME280 gagal mulai.");
-    }
-    if (!lightMeter.begin(BH1750::CONTINUOUS_HIGH_RES_MODE)) {
-        Serial.println("BH1750 gagal mulai.");
-    }
-}
-
-
-
-void baca_sensor(){
-    // Pembacaan sensor
-    TCA9548A(6);
-    if (mySensor.dataAvailable()) {
-        //Serial.println("----------------------");
-        mySensor.readAlgorithmResults();
-        //Serial.print("CO2: ");
-        //Serial.print(mySensor.getCO2());
-        //Serial.print(" ppm, TVOC: ");
-        //Serial.println(mySensor.getTVOC());
-        
-    }
-
+    // Inisialisasi sensor SET 1 (di channel 1)
     TCA9548A(1);
-    //Serial.print("Temp 1: ");
-    //Serial.print(bme.readTemperature());
-    suhu1 = bme.readTemperature();
-    //Serial.print(" C, Humidity 1 : ");
-    //Serial.print(bme.readHumidity());
-    hum1 = bme.readHumidity();
-    //Serial.print(" %, Lux 1: ");
-    //Serial.println(lightMeter.readLightLevel());
-    lux1 = lightMeter.readLightLevel();
-    
+    Serial.print("Inisialisasi BME280 #1 di channel 1... ");
+    if (!bme1.begin(0x76)) { Serial.println("GAGAL!"); } else { Serial.println("BERHASIL!"); }
 
-    TCA9548A(3);
-    //Serial.print("Temp 2: ");
-    //Serial.print(bme.readTemperature());
-    suhu2 = bme.readTemperature();
-    //Serial.print(" C, Humidity 2 : ");
-    //Serial.print(bme.readHumidity());
-    hum2 = bme.readHumidity();
-    //Serial.print(" %, Lux 2: ");
-    //Serial.println(lightMeter.readLightLevel());
-    lux2 = lightMeter.readLightLevel();
-    //Serial.println("------------------------");
+    Serial.print("Inisialisasi BH1750 #1 di channel 1... ");
+    if (!lightMeter1.begin(BH1750::CONTINUOUS_HIGH_RES_MODE)) { Serial.println("GAGAL!"); } else { Serial.println("BERHASIL!"); }
 
+    // Inisialisasi sensor SET 2 (di channel 2)
+    TCA9548A(2);
+    Serial.print("Inisialisasi BME280 #2 di channel 2... ");
+    if (!bme2.begin(0x76)) { Serial.println("GAGAL!"); } else { Serial.println("BERHASIL!"); }
+
+    Serial.print("Inisialisasi BH1750 #2 di channel 2... ");
+    if (!lightMeter2.begin(BH1750::CONTINUOUS_HIGH_RES_MODE)) { Serial.println("GAGAL!"); } else { Serial.println("BERHASIL!"); }
+
+    // Mengambil bacaan pertama untuk menginisialisasi nilai filter agar tidak mulai dari nol
+    Serial.println("Mengambil bacaan sensor awal untuk inisialisasi filter...");
+    delay(1000); // Beri waktu sensor untuk stabil setelah power on
+    TCA9548A(0);
+    if(mySensor.dataAvailable()){ mySensor.readAlgorithmResults(); co2_val = mySensor.getCO2(); tvoc_val = mySensor.getTVOC(); }
+    TCA9548A(1); suhu1 = bme1.readTemperature(); hum1 = bme1.readHumidity(); lux1 = lightMeter1.readLightLevel();
+    TCA9548A(2); suhu2 = bme2.readTemperature(); hum2 = bme2.readHumidity(); lux2 = lightMeter2.readLightLevel();
     
-    suhuAvg = (suhu1 + suhu2)/2;
-    humAvg = (hum1+ hum2)/2;
-    luxAvg = (lux1 + lux2)/2;
-    //Serial.print("Suhu (rata-rata) = ");
-    //Serial.println(suhuAvg);
-    //Serial.print("Humifidy (rata-rata) = ");
-    //Serial.println(humAvg);
-    //Serial.print("lux (rata-rata) =");
-    //Serial.println(luxAvg);
+    Serial.println("--- Setup Sensor Selesai ---");
 }
 
+
+// =================================================================
+//                 FUNGSI BACA SENSOR (DENGAN FILTER)
+// =================================================================
+// Membaca nilai dari semua sensor dan menghaluskannya menggunakan filter.
+void baca_sensor(){
+    // Pembacaan sensor CCS811 (channel 0)
+    TCA9548A(0);
+    if (mySensor.dataAvailable()) {
+        mySensor.readAlgorithmResults();
+        co2_val = (FILTER_ALPHA * mySensor.getCO2()) + ((1.0 - FILTER_ALPHA) * co2_val);
+        tvoc_val = (FILTER_ALPHA * mySensor.getTVOC()) + ((1.0 - FILTER_ALPHA) * tvoc_val);
+    }
+
+    // Pembacaan sensor SET 1 (channel 1)
+    TCA9548A(1);
+    suhu1 = (FILTER_ALPHA * bme1.readTemperature()) + ((1.0 - FILTER_ALPHA) * suhu1);
+    hum1 = (FILTER_ALPHA * bme1.readHumidity()) + ((1.0 - FILTER_ALPHA) * hum1);
+    lux1 = (FILTER_ALPHA * lightMeter1.readLightLevel()) + ((1.0 - FILTER_ALPHA) * lux1);
+
+    // Pembacaan sensor SET 2 (channel 2)
+    TCA9548A(2);
+    suhu2 = (FILTER_ALPHA * bme2.readTemperature()) + ((1.0 - FILTER_ALPHA) * suhu2);
+    hum2 = (FILTER_ALPHA * bme2.readHumidity()) + ((1.0 - FILTER_ALPHA) * hum2);
+    lux2 = (FILTER_ALPHA * lightMeter2.readLightLevel()) + ((1.0 - FILTER_ALPHA) * lux2);
+
+    // Hitung nilai rata-rata dari data yang sudah difilter
+    suhuAvg = ((suhu1 + suhu2) / 2.0) - 0.5; // Kalibrasi -0.5 tetap diterapkan
+    humAvg = (hum1 + hum2) / 2.0;
+    luxAvg = (lux1 + lux2) / 2.0;
+}
+
+#endif // SENSOR_H
